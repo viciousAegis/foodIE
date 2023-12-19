@@ -2,3 +2,6 @@
 stanford-corenlp-4.5.5/
 stanford-corenlp-4.5.5.zip
 temp.ipynb
+main.py
+posts_data.csv
+__pycache__/

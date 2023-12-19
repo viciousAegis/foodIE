@@ -1,10 +1,8 @@
-import numpy as np
-import pandas as pd
 import re
 from unidecode import unidecode
-import json
 import spacy
 import argparse
+from tqdm import tqdm
 
 def clean_text(post):
     cleaned_post = re.sub(r'#\w+\s*', '', post)  # Remove words starting with #
@@ -16,7 +14,7 @@ def clean_text(post):
     
     return transliterated_post
 
-def get_docs(posts):
+def get_docs(posts, nlp):
     docs = []
     for post in posts:
         cleaned_post = clean_text(post)
@@ -26,7 +24,7 @@ def get_docs(posts):
 
 # temporary
 food_substitution_posts = [
-    "Heat the Colby-jack white beef soup in the pan until it boils.",
+    "Heat the white beef soup in the pan until it boils.",
     "Just tried using applesauce instead of 'oil' in my baking recipe and it turned out surprisingly moist! #HealthyBaking #FoodSubstitutions",
     "Swapped cauliflower for rice in my stir-fry and it's a game-changer! Low-carb and delicious. #FoodHacks #CauliflowerRice",
     'Replacing dairy with almond milk in my "morning" smoothie -    loving the nutty flavor! #DairyFree #HealthyChoices',
@@ -39,7 +37,6 @@ food_substitution_posts = [
     "Using quinoa instead of rice in my burrito bowl - a nuttier taste and loaded with nutrients! #QuinoaLove #HealthyChoices",
     "Discovering the wonders of using mashed bananas as an egg substitute in baking. Works like a charm! #EggSubstitutes #BakingTips"
 ]
-
 class Rule1:
     # if true, tag as food object
     
@@ -305,6 +302,44 @@ class FoodIE:
                     food_entities.append(token.text)
         return food_entities
 
+def run(docs, print_tags=False):
+    nlp = spacy.load('en_core_web_sm', exclude=['parser', 'ner'])
+
+    # define custom extension for spaCy tokens
+    spacy.tokens.Token.set_extension("food_tag", default=False, force=True)
+    spacy.tokens.Token.set_extension("general_object_tag", default=False, force=True)
+    spacy.tokens.Token.set_extension("color_tag", default=False, force=True)
+    spacy.tokens.Token.set_extension("not_allowed_tag", default=False, force=True)
+    spacy.tokens.Token.set_extension("used", default=False, force=True)
+
+    # Load the English PyMUSAS rule-based tagger in a separate spaCy pipeline
+    english_tagger_pipeline = spacy.load('en_dual_none_contextual')
+    # Adds the English PyMUSAS rule-based tagger to the main spaCy pipeline
+    nlp.add_pipe('pymusas_rule_based_tagger', source=english_tagger_pipeline)
+    
+    foodIE = FoodIE()
+    
+    docs = get_docs(docs, nlp)
+    
+    food_items_list = []
+    
+    for doc in tqdm(docs):
+        foodIE.set_doc(doc)
+        # print("DOCUMENT:")
+        # print(doc)
+        
+        if print_tags:
+            foodIE.print_doc()
+            print('\n')
+        
+        food_entities = foodIE.get_food_entities()
+        print("EXTRACTED FOOD ENTITIES:")
+        print(food_entities)
+        print('\n')
+        food_items_list.append(food_entities)
+    
+    return food_items_list
+
 if __name__ == '__main__':
     
     argparser = argparse.ArgumentParser()
@@ -330,7 +365,7 @@ if __name__ == '__main__':
     foodIE = FoodIE()
     
     if args.doc:
-        docs = get_docs([args.doc])
+        docs = get_docs([args.doc], nlp)
     else:
         docs = get_docs(food_substitution_posts)
     
